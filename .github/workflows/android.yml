@@ -1,32 +1,26 @@
-name: Build ASTRO APK
+name: Diagnose ASTRO Flet
 
 on:
   workflow_dispatch:
 
 permissions:
   contents: read
-env:
-  FLET_CLI_NO_RICH_OUTPUT: "1"
+
 jobs:
-  build:
+  diagnose:
     runs-on: ubuntu-latest
 
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v6
+        uses: actions/checkout@v4
 
-      - name: Build APK
-        id: build
-        uses: flet-dev/flet-build-action@v1
-        with:        
-          target: apk
-          runner-python-version: "3.12"
-          bundled-python-version: "3.12"
-          build-number: ${{ github.run_number }}
-          cache: false
-      - name: Upload APK
-        uses: actions/upload-artifact@v7
-        with:
-          path: ${{ steps.build.outputs.archive-path }}
-          archive: false
-          if-no-files-found: error
+      - name: Setup uv
+        uses: astral-sh/setup-uv@v6
+
+      - name: Diagnose Flet CLI
+        shell: bash
+        run: |
+          uv run --with "flet>=0.85.3" flet --version --json
+          echo "JSON_EXIT_CODE=$?"
+          uv run --with "flet>=0.85.3" flet --version
+          echo "VERSION_EXIT_CODE=$?"
