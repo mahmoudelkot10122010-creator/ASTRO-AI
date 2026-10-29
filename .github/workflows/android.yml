@@ -27,5 +27,6 @@ jobs:
 
       - name: Check Flet
         run: |
-          python -m flet --version
+          pip show flet
+      
           python -m flet --help
