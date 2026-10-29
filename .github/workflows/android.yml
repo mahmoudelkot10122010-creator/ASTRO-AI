@@ -5,7 +5,8 @@ on:
 
 permissions:
   contents: read
-
+env:
+  FLET_CLI_NO_RICH_OUTPUT: "1"
 jobs:
   build:
     runs-on: ubuntu-latest
