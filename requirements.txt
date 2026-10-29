@@ -1,0 +1,4 @@
+flet>=0.28.0
+g4f
+duckduckgo-search
+langdetect
