@@ -7,7 +7,6 @@ dependencies = [
     "flet>=0.85.3",
     "g4f",
     "duckduckgo-search",
-    "langdetect",
 ]
 
 [tool.flet]
