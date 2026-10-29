@@ -1,4 +1,4 @@
-name: Diagnose ASTRO Flet
+name: Build ASTRO APK
 
 on:
   workflow_dispatch:
@@ -7,20 +7,25 @@ permissions:
   contents: read
 
 jobs:
-  diagnose:
+  build:
     runs-on: ubuntu-latest
 
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Setup uv
-        uses: astral-sh/setup-uv@v6
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
 
-      - name: Diagnose Flet CLI
-        shell: bash
+      - name: Install dependencies
         run: |
-          uv run --with "flet>=0.85.3" flet --version --json
-          echo "JSON_EXIT_CODE=$?"
-          uv run --with "flet>=0.85.3" flet --version
-          echo "VERSION_EXIT_CODE=$?"
+          python -m pip install --upgrade pip
+          pip install flet==0.85.3
+          pip install g4f duckduckgo-search langdetect
+
+      - name: Check Flet
+        run: |
+          python -m flet --version
+          python -m flet --help
