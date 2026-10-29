@@ -18,12 +18,12 @@ jobs:
       - name: Build APK
         id: build
         uses: flet-dev/flet-build-action@v1
-        with:          cache: false
+        with:        
           target: apk
           runner-python-version: "3.12"
           bundled-python-version: "3.12"
           build-number: ${{ github.run_number }}
-
+          cache: false
       - name: Upload APK
         uses: actions/upload-artifact@v7
         with:
