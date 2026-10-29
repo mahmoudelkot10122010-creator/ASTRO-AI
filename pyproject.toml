@@ -1,0 +1,20 @@
+[project]
+name = "astro-ai"
+version = "0.1.0"
+description = "ASTRO AI Assistant"
+requires-python = ">=3.12,<3.13"
+dependencies = [
+    "flet>=0.28.0",
+    "g4f",
+    "duckduckgo-search",
+    "langdetect",
+]
+
+[tool.flet]
+org = "com.astroai"
+product = "ASTRO"
+company = "ASTRO"
+copyright = "Copyright (C) 2026"
+
+[tool.flet.app]
+path = "."
