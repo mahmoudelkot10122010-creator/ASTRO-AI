@@ -1,4 +1,4 @@
-Name: Build ASTRO APK
+name: Build ASTRO APK
 
 on:
   workflow_dispatch:
