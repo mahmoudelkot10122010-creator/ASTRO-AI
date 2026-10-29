@@ -18,7 +18,7 @@ jobs:
       - name: Build APK
         id: build
         uses: flet-dev/flet-build-action@v1
-        with:
+        with:          cache: false
           target: apk
           runner-python-version: "3.12"
           bundled-python-version: "3.12"
