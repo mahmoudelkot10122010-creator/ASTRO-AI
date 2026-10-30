@@ -1,14 +1,15 @@
 import asyncio
 import threading
-
 import flet as ft
-import g4f
+from g4f.client import Client
 from duckduckgo_search import DDGS
-
 
 APP_NAME = "ASTRO"
 
-# ASTRO Dark Theme
+# =========================
+# ASTRO THEME
+# =========================
+
 BG = "#0B0D14"
 SURFACE = "#121622"
 ACCENT = "#8B5CF6"
@@ -21,21 +22,34 @@ USER_BUBBLE = "#252044"
 AI_BUBBLE = "#151B29"
 
 BAD_WORDS = [
-    "هكر", "اختراق", "hack", "سكس", "اباحي", "شتم", "تهكير"
+    "هكر",
+    "اختراق",
+    "hack",
+    "سكس",
+    "اباحي",
+    "إباحي",
+    "تهكير",
 ]
 
 SYSTEM_PROMPT = """
-You are ASTRO, a helpful AI assistant with a friendly Egyptian Arabic style.
-Reply in the same language as the user. If the user writes Arabic, use natural Egyptian Arabic.
-If the user writes English, use casual but clear English.
-You are an AI assistant named ASTRO. Be honest about being AI.
-If asked for harmful or inappropriate help, politely redirect to safe alternatives.
-Keep answers clear and reasonably concise. Use supplied web results carefully.
+You are ASTRO, a helpful AI assistant.
+
+Reply in the same language as the user.
+When the user writes Arabic, use natural Egyptian Arabic.
+When the user writes English, use clear, friendly English.
+Be honest that you are an AI assistant.
+Give useful, accurate, reasonably concise answers.
+If web search results are supplied, use them carefully.
+If a request is unsafe, redirect toward a safe alternative.
 """
 
 messages = [{"role": "system", "content": SYSTEM_PROMPT}]
 messages_lock = threading.Lock()
 
+
+# =========================
+# LANGUAGE AND SAFETY
+# =========================
 
 def is_bad(text: str) -> bool:
     lowered = text.lower()
@@ -44,45 +58,83 @@ def is_bad(text: str) -> bool:
 
 def detect_language(text: str) -> str:
     if any("\u0600" <= char <= "\u06FF" for char in text):
-        return "ar"
-    return "en"
+        return "Arabic"
+    return "English"
 
+
+# =========================
+# INTERNET SEARCH
+# =========================
 
 def search_net(query: str) -> str:
     try:
         with DDGS() as ddgs:
-            results = list(ddgs.text(query, max_results=3))
+            results = list(
+                ddgs.text(query, max_results=3)
+            )
 
-        return "\n".join(
-            f"- {item.get('title', '')}: {item.get('body', '')}"
-            for item in results
-            if item.get("body")
-        )
+        lines = []
+
+        for item in results:
+            title = item.get("title", "")
+            body = item.get("body", "")
+            url = item.get("href", "")
+
+            if body:
+                lines.append(
+                    f"- {title}\n"
+                    f"  {body}\n"
+                    f"  {url}"
+                )
+
+        return "\n".join(lines)
+
     except Exception:
         return ""
 
 
-def get_ai_reply(question: str):
-    lang = detect_language(question)
-    search_data = ""
+# =========================
+# AI BACKEND
+# =========================
 
+def get_ai_reply(question: str):
     search_terms = [
-        "who", "مين", "news", "اخبار", "أخبار",
-        "price", "سعر", "film", "فيلم", "امتى",
-        "فين", "when", "where", "latest",
+        "who",
+        "مين",
+        "news",
+        "اخبار",
+        "أخبار",
+        "price",
+        "سعر",
+        "film",
+        "فيلم",
+        "امتى",
+        "فين",
+        "when",
+        "where",
+        "latest",
+        "آخر",
+        "اخر",
+        "دلوقتي",
+        "حاليا",
     ]
 
-    if any(term in question.lower() for term in search_terms):
+    search_data = ""
+
+    if any(
+        term in question.lower()
+        for term in search_terms
+    ):
         search_data = search_net(question)
 
     final_question = question
 
     if search_data:
         final_question = (
-            f"User question: {question}\n"
-            f"Web search results (may be incomplete):\n"
-            f"{search_data}\n"
-            f"Reply in the user's language ({lang}) as ASTRO."
+            f"User question: {question}\n\n"
+            f"Internet search results:\n"
+            f"{search_data}\n\n"
+            f"Answer in {detect_language(question)}."
         )
 
     with messages_lock:
@@ -92,13 +144,23 @@ def get_ai_reply(question: str):
         })
 
         try:
-            response = g4f.ChatCompletion.create(
-                model=g4f.models.gpt_4o_mini,
+            client = Client()
+
+            response = client.chat.completions.create(
+                model="gpt-4o-mini",
                 messages=messages,
             )
 
-            answer = str(response)
+            answer = response.choices[0].message.content
 
+            if not answer:
+                raise RuntimeError(
+                    "The AI provider returned an empty response."
+                )
+
+            answer = str(answer).strip()
+
+            # Keep the original question in the conversation.
             messages[-1] = {
                 "role": "user",
                 "content": question,
@@ -109,16 +171,27 @@ def get_ai_reply(question: str):
                 "content": answer,
             })
 
+            # Keep the conversation history manageable.
             if len(messages) > 21:
-                messages[:] = [messages[0]] + messages[-20:]
+                messages[:] = (
+                    [messages[0]] + messages[-20:]
+                )
 
             return answer, bool(search_data)
 
         except Exception:
-            if messages and messages[-1].get("role") == "user":
+            if (
+                messages
+                and messages[-1].get("role") == "user"
+            ):
                 messages.pop()
+
             raise
 
+
+# =========================
+# USER INTERFACE
+# =========================
 
 def main(page: ft.Page):
     page.title = APP_NAME
@@ -148,7 +221,15 @@ def main(page: ft.Page):
         color=CYAN,
     )
 
-    def add_bubble(sender: str, content: str, is_user: bool = False):
+    # -------------------------
+    # CHAT BUBBLES
+    # -------------------------
+
+    def add_bubble(
+        sender: str,
+        content: str,
+        is_user: bool = False,
+    ):
         avatar = ft.Container(
             content=ft.Icon(
                 ft.Icons.PERSON_ROUNDED
@@ -160,7 +241,9 @@ def main(page: ft.Page):
             width=34,
             height=34,
             border_radius=12,
-            bgcolor=USER_BUBBLE if is_user else ACCENT,
+            bgcolor=(
+                USER_BUBBLE if is_user else ACCENT
+            ),
             alignment=ft.Alignment.CENTER,
         )
 
@@ -171,7 +254,11 @@ def main(page: ft.Page):
                         sender,
                         size=12,
                         weight=ft.FontWeight.BOLD,
-                        color=CYAN if is_user else ACCENT_LIGHT,
+                        color=(
+                            CYAN
+                            if is_user
+                            else ACCENT_LIGHT
+                        ),
                     ),
                     ft.Text(
                         content,
@@ -183,15 +270,26 @@ def main(page: ft.Page):
                 spacing=7,
                 tight=True,
             ),
-            bgcolor=USER_BUBBLE if is_user else AI_BUBBLE,
+            bgcolor=(
+                USER_BUBBLE
+                if is_user
+                else AI_BUBBLE
+            ),
             border=ft.Border.all(1, BORDER),
             border_radius=18,
             padding=14,
-            width=min((page.width or 420) * 0.78, 520),
+            width=min(
+                (page.width or 420) * 0.78,
+                520,
+            ),
         )
 
         row = ft.Row(
-            [bubble, avatar] if is_user else [avatar, bubble],
+            (
+                [bubble, avatar]
+                if is_user
+                else [avatar, bubble]
+            ),
             alignment=(
                 ft.MainAxisAlignment.END
                 if is_user
@@ -204,10 +302,17 @@ def main(page: ft.Page):
         chat.controls.append(row)
         page.update()
 
+    # -------------------------
+    # NEW CHAT
+    # -------------------------
+
     def clear_chat(_):
         with messages_lock:
             messages[:] = [
-                {"role": "system", "content": SYSTEM_PROMPT}
+                {
+                    "role": "system",
+                    "content": SYSTEM_PROMPT,
+                }
             ]
 
         chat.controls.clear()
@@ -222,6 +327,10 @@ def main(page: ft.Page):
         status.value = "● محادثة جديدة"
         page.update()
 
+    # -------------------------
+    # SEND MESSAGE
+    # -------------------------
+
     async def send_message(_=None):
         question = (input_box.value or "").strip()
 
@@ -234,8 +343,10 @@ def main(page: ft.Page):
         if is_bad(question):
             add_bubble(
                 "ASTRO AI",
-                "خلّينا في حاجة مفيدة وآمنة، وأنا أساعدك فيها.",
+                "خلّينا في حاجة مفيدة وآمنة، "
+                "وأنا أساعدك فيها.",
             )
+
             status.value = "● جاهز"
             page.update()
             return
@@ -276,7 +387,8 @@ def main(page: ft.Page):
 
         try:
             answer, searched = await asyncio.to_thread(
-                get_ai_reply, question
+                get_ai_reply,
+                question,
             )
 
             if waiting_row in chat.controls:
@@ -290,14 +402,19 @@ def main(page: ft.Page):
                 else "● جاهز"
             )
 
-        except Exception:
+        except Exception as error:
             if waiting_row in chat.controls:
                 chat.controls.remove(waiting_row)
 
+            error_details = (
+                f"{type(error).__name__}: {error}"
+            )
+
             add_bubble(
                 "ASTRO AI",
-                "مش قادر أوصل لمزوّد الذكاء الاصطناعي دلوقتي.\n"
-                "اتأكد من اتصال الإنترنت وحاول تاني بعد شوية.",
+                "حصل خطأ أثناء الاتصال بمزوّد الذكاء الاصطناعي.\n\n"
+                f"تفاصيل الخطأ:\n{error_details}\n\n"
+                "اتأكد من الإنترنت وحاول تاني.",
             )
 
             status.value = "● تعذّر الاتصال"
@@ -306,6 +423,10 @@ def main(page: ft.Page):
             send_button.disabled = False
             input_box.disabled = False
             page.update()
+
+    # -------------------------
+    # MESSAGE INPUT
+    # -------------------------
 
     input_box = ft.TextField(
         hint_text="اكتب رسالتك هنا...",
@@ -317,14 +438,19 @@ def main(page: ft.Page):
         text_size=15,
         color=WHITE,
         cursor_color=ACCENT_LIGHT,
-        hint_style=ft.TextStyle(color=MUTED),
+        hint_style=ft.TextStyle(
+            color=MUTED,
+        ),
         content_padding=ft.Padding(
             left=12,
             top=12,
             right=12,
             bottom=12,
         ),
-        on_submit=lambda e: page.run_task(send_message, e),
+        on_submit=lambda e: page.run_task(
+            send_message,
+            e,
+        ),
     )
 
     send_button = ft.IconButton(
@@ -332,8 +458,15 @@ def main(page: ft.Page):
         icon_color=WHITE,
         bgcolor=ACCENT,
         tooltip="إرسال الرسالة",
-        on_click=lambda e: page.run_task(send_message, e),
+        on_click=lambda e: page.run_task(
+            send_message,
+            e,
+        ),
     )
+
+    # -------------------------
+    # HEADER
+    # -------------------------
 
     logo = ft.Container(
         content=ft.Icon(
@@ -391,6 +524,10 @@ def main(page: ft.Page):
         ),
     )
 
+    # -------------------------
+    # STATUS BAR
+    # -------------------------
+
     status_bar = ft.Container(
         content=status,
         padding=ft.Padding(
@@ -401,6 +538,10 @@ def main(page: ft.Page):
         ),
         bgcolor=BG,
     )
+
+    # -------------------------
+    # MESSAGE COMPOSER
+    # -------------------------
 
     composer = ft.Container(
         content=ft.Row(
@@ -425,6 +566,10 @@ def main(page: ft.Page):
             bottom=10,
         ),
     )
+
+    # -------------------------
+    # PAGE LAYOUT
+    # -------------------------
 
     page.add(
         ft.Column(
@@ -452,6 +597,10 @@ def main(page: ft.Page):
 
     page.update()
 
+
+# =========================
+# APP ENTRY POINT
+# =========================
 
 if __name__ == "__main__":
     ft.run(main)
