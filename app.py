@@ -1,21 +1,32 @@
 import asyncio
+import threading
 import os
 import tempfile
-import threading
 from pathlib import Path
 
+# =========================
+# ASTRO / G4F STORAGE FIX
+# =========================
+
+ASTRO_DATA = Path(tempfile.gettempdir()) / "astro_g4f"
+ASTRO_DATA.mkdir(parents=True, exist_ok=True)
+
+G4F_COOKIES = ASTRO_DATA / "cookies"
+G4F_COOKIES.mkdir(parents=True, exist_ok=True)
+
+os.environ["HOME"] = str(ASTRO_DATA)
+os.environ["XDG_CONFIG_HOME"] = str(ASTRO_DATA)
+os.environ["G4F_COOKIES_DIR"] = str(G4F_COOKIES)
+
 import flet as ft
-import g4f
-import g4f.config
 from g4f.client import Client
 from duckduckgo_search import DDGS
 
-
-# =========================
-# ASTRO CONFIGURATION
-# =========================
-
 APP_NAME = "ASTRO"
+
+# =========================
+# ASTRO THEME
+# =========================
 
 BG = "#0B0D14"
 SURFACE = "#121622"
@@ -27,33 +38,6 @@ MUTED = "#929BB0"
 BORDER = "#272D40"
 USER_BUBBLE = "#252044"
 AI_BUBBLE = "#151B29"
-
-
-# =========================
-# G4F CONFIGURATION
-# =========================
-
-ASTRO_DATA = Path(tempfile.gettempdir()) / "astro_g4f"
-ASTRO_DATA.mkdir(parents=True, exist_ok=True)
-
-G4F_COOKIES = ASTRO_DATA / "cookies"
-G4F_COOKIES.mkdir(parents=True, exist_ok=True)
-
-# Configure g4f before creating its client.
-g4f.config.CONFIG_DIR = ASTRO_DATA
-g4f.config.COOKIES_DIR = G4F_COOKIES
-
-# Also configure the cookie directory through its API.
-try:
-    from g4f.cookies import set_cookies_dir
-    set_cookies_dir(str(G4F_COOKIES))
-except (ImportError, AttributeError):
-    pass
-
-
-# =========================
-# CHAT CONFIGURATION
-# =========================
 
 BAD_WORDS = [
     "هكر",
@@ -77,10 +61,7 @@ If web search results are supplied, use them carefully.
 If a request is unsafe, redirect toward a safe alternative.
 """
 
-messages = [
-    {"role": "system", "content": SYSTEM_PROMPT}
-]
-
+messages = [{"role": "system", "content": SYSTEM_PROMPT}]
 messages_lock = threading.Lock()
 
 
@@ -197,6 +178,7 @@ def get_ai_reply(question: str):
 
             answer = str(answer).strip()
 
+            # Keep the original question in the conversation.
             messages[-1] = {
                 "role": "user",
                 "content": question,
@@ -207,6 +189,7 @@ def get_ai_reply(question: str):
                 "content": answer,
             })
 
+            # Keep the conversation history manageable.
             if len(messages) > 21:
                 messages[:] = (
                     [messages[0]] + messages[-20:]
@@ -473,7 +456,9 @@ def main(page: ft.Page):
         text_size=15,
         color=WHITE,
         cursor_color=ACCENT_LIGHT,
-        hint_style=ft.TextStyle(color=MUTED),
+        hint_style=ft.TextStyle(
+            color=MUTED,
+        ),
         content_padding=ft.Padding(
             left=12,
             top=12,
@@ -630,6 +615,10 @@ def main(page: ft.Page):
 
     page.update()
 
+
+# =========================
+# APP ENTRY POINT
+# =========================
 
 if __name__ == "__main__":
     ft.run(main)
