@@ -9,6 +9,9 @@ from duckduckgo_search import DDGS
 
 APP_NAME = "ASTRO"
 
+DEVELOPERS_AR = "محمود عبدالحليم وعمر شرف الدين"
+DEVELOPERS_EN = "Mahmoud Abdelhalim and Omar Sharaf El-Din"
+
 # =========================
 # ASTRO THEME
 # =========================
@@ -34,8 +37,21 @@ BAD_WORDS = [
     "تهكير",
 ]
 
-SYSTEM_PROMPT = """
+SYSTEM_PROMPT = f"""
 You are ASTRO, a helpful AI assistant.
+
+IDENTITY AND DEVELOPERS:
+Your name is ASTRO.
+Your developers are:
+1. {DEVELOPERS_AR}
+2. {DEVELOPERS_EN}
+
+If anyone asks who developed you, who created you,
+who your programmers are, or who made ASTRO,
+answer clearly that your developers are {DEVELOPERS_AR}.
+
+Do not invent additional developers or claim that someone else
+developed you.
 
 Reply in the same language as the user.
 When the user writes Arabic, use natural Egyptian Arabic.
@@ -66,6 +82,59 @@ def detect_language(text: str) -> str:
 
 
 # =========================
+# DEVELOPER QUESTIONS
+# =========================
+
+def is_developer_question(text: str) -> bool:
+    lowered = text.lower()
+
+    keywords = [
+        "مطور",
+        "المطورين",
+        "مطوريك",
+        "طورك",
+        "صنعك",
+        "عملك",
+        "برمجك",
+        "مبرمجك",
+        "مين عمل",
+        "مين صنع",
+        "مين طور",
+        "مين برمج",
+        "مين صاحب",
+        "who developed",
+        "who created",
+        "who made you",
+        "your developer",
+        "your developers",
+        "your creator",
+        "your creators",
+        "your programmer",
+        "your programmers",
+        "who built you",
+    ]
+
+    return any(keyword in lowered for keyword in keywords)
+
+
+def developer_answer(text: str) -> str:
+    if detect_language(text) == "Arabic":
+        return (
+            f"أنا ASTRO! 🚀\n\n"
+            f"المطورين بتوعي هما:\n"
+            f"👨‍💻 {DEVELOPERS_AR}\n\n"
+            f"وهم أصحاب تطوير المشروع."
+        )
+
+    return (
+        "I'm ASTRO! 🚀\n\n"
+        "My developers are:\n"
+        f"👨‍💻 {DEVELOPERS_EN}\n\n"
+        "They are the developers of this project."
+    )
+
+
+# =========================
 # INTERNET SEARCH
 # =========================
 
@@ -79,10 +148,12 @@ def search_net(query: str) -> str:
             title = item.get("title", "")
             body = item.get("body", "")
             url = item.get("href", "")
+
             if body:
                 lines.append(f"- {title}\n  {body}\n  {url}")
 
         return "\n".join(lines)
+
     except Exception:
         return ""
 
@@ -93,20 +164,40 @@ def search_net(query: str) -> str:
 
 def get_ai_reply(question: str, api_key: str):
     api_key = (api_key or "").strip()
+
     if not api_key:
-        raise RuntimeError("اكتب مفتاح FreeTheAI في خانة مفتاح API أولًا.")
+        raise RuntimeError(
+            "اكتب مفتاح FreeTheAI في خانة مفتاح API أولًا."
+        )
 
     search_terms = [
-        "who", "مين", "news", "اخبار", "أخبار", "price", "سعر",
-        "film", "فيلم", "امتى", "فين", "when", "where", "latest",
-        "آخر", "اخر", "دلوقتي", "حاليا",
+        "who",
+        "مين",
+        "news",
+        "اخبار",
+        "أخبار",
+        "price",
+        "سعر",
+        "film",
+        "فيلم",
+        "امتى",
+        "فين",
+        "when",
+        "where",
+        "latest",
+        "آخر",
+        "اخر",
+        "دلوقتي",
+        "حاليا",
     ]
 
     search_data = ""
+
     if any(term in question.lower() for term in search_terms):
         search_data = search_net(question)
 
     final_question = question
+
     if search_data:
         final_question = (
             f"User question: {question}\n\n"
@@ -137,17 +228,32 @@ def get_ai_reply(question: str, api_key: str):
         )
 
         try:
-            with urllib.request.urlopen(request, timeout=60) as response:
-                data = json.loads(response.read().decode("utf-8"))
+            with urllib.request.urlopen(
+                request,
+                timeout=60
+            ) as response:
+                data = json.loads(
+                    response.read().decode("utf-8")
+                )
 
             answer = data["choices"][0]["message"]["content"]
+
             if not answer:
-                raise RuntimeError("المزوّد أرسل ردًا فارغًا.")
+                raise RuntimeError(
+                    "المزوّد أرسل ردًا فارغًا."
+                )
 
             answer = str(answer).strip()
 
-            messages.append({"role": "user", "content": question})
-            messages.append({"role": "assistant", "content": answer})
+            messages.append({
+                "role": "user",
+                "content": question
+            })
+
+            messages.append({
+                "role": "assistant",
+                "content": answer
+            })
 
             if len(messages) > 21:
                 messages[:] = [messages[0]] + messages[-20:]
@@ -155,15 +261,26 @@ def get_ai_reply(question: str, api_key: str):
             return answer, bool(search_data)
 
         except urllib.error.HTTPError as error:
-            details = error.read().decode("utf-8", errors="replace")
+            details = error.read().decode(
+                "utf-8",
+                errors="replace"
+            )
+
             raise RuntimeError(
                 f"FreeTheAI HTTP {error.code}: {details}"
             ) from error
+
         except urllib.error.URLError as error:
             raise RuntimeError(
                 f"تعذّر الاتصال بالإنترنت: {error.reason}"
             ) from error
-        except (KeyError, IndexError, TypeError, json.JSONDecodeError) as error:
+
+        except (
+            KeyError,
+            IndexError,
+            TypeError,
+            json.JSONDecodeError
+        ) as error:
             raise RuntimeError(
                 "استجابة غير متوقعة من FreeTheAI."
             ) from error
@@ -195,9 +312,14 @@ def main(page: ft.Page):
         auto_scroll=True,
     )
 
-    status = ft.Text("● جاهز", size=11, color=CYAN)
+    status = ft.Text(
+        "● جاهز",
+        size=11,
+        color=CYAN
+    )
 
-    # The key is held only in this screen's memory, not saved in GitHub.
+    # API KEY INPUT
+
     api_key_box = ft.TextField(
         label="مفتاح FreeTheAI API",
         hint_text="الصق المفتاح الذي يبدأ بـ ftai_ هنا",
@@ -217,10 +339,16 @@ def main(page: ft.Page):
     # CHAT BUBBLES
     # -------------------------
 
-    def add_bubble(sender: str, content: str, is_user: bool = False):
+    def add_bubble(
+        sender: str,
+        content: str,
+        is_user: bool = False
+    ):
         avatar = ft.Container(
             content=ft.Icon(
-                ft.Icons.PERSON_ROUNDED if is_user else ft.Icons.AUTO_AWESOME,
+                ft.Icons.PERSON_ROUNDED
+                if is_user
+                else ft.Icons.AUTO_AWESOME,
                 size=18,
                 color=WHITE,
             ),
@@ -240,7 +368,12 @@ def main(page: ft.Page):
                         weight=ft.FontWeight.BOLD,
                         color=CYAN if is_user else ACCENT_LIGHT,
                     ),
-                    ft.Text(content, size=15, color=WHITE, selectable=True),
+                    ft.Text(
+                        content,
+                        size=15,
+                        color=WHITE,
+                        selectable=True
+                    ),
                 ],
                 spacing=7,
                 tight=True,
@@ -255,7 +388,8 @@ def main(page: ft.Page):
         row = ft.Row(
             [bubble, avatar] if is_user else [avatar, bubble],
             alignment=(
-                ft.MainAxisAlignment.END if is_user
+                ft.MainAxisAlignment.END
+                if is_user
                 else ft.MainAxisAlignment.START
             ),
             vertical_alignment=ft.CrossAxisAlignment.START,
@@ -271,15 +405,19 @@ def main(page: ft.Page):
 
     def clear_chat(_):
         with messages_lock:
-            messages[:] = [{"role": "system", "content": SYSTEM_PROMPT}]
+            messages[:] = [
+                {"role": "system", "content": SYSTEM_PROMPT}
+            ]
 
         chat.controls.clear()
+
         add_bubble(
             "ASTRO AI",
             "أهلًا بيك في ASTRO! ✨\n\n"
             "أنا مساعدك الذكي. اسألني عن أي حاجة، "
             "وهحاول أساعدك بأفضل شكل ممكن.",
         )
+
         status.value = "● محادثة جديدة"
         page.update()
 
@@ -289,27 +427,43 @@ def main(page: ft.Page):
 
     async def send_message(_=None):
         question = (input_box.value or "").strip()
-        if not question:
-            return
 
-        api_key = (api_key_box.value or "").strip()
-        if not api_key:
-            status.value = "● أدخل مفتاح FreeTheAI أولًا"
-            page.update()
-            add_bubble(
-                "ASTRO AI",
-                "اكتب مفتاح FreeTheAI في خانة «مفتاح FreeTheAI API» قبل إرسال سؤالك.",
-            )
+        if not question:
             return
 
         input_box.value = ""
         add_bubble("أنت", question, True)
+
+        # Developer questions are answered locally.
+        # They do not require an API key or internet connection.
+        if is_developer_question(question):
+            add_bubble(
+                "ASTRO AI",
+                developer_answer(question)
+            )
+            status.value = "● جاهز"
+            page.update()
+            return
+
+        api_key = (api_key_box.value or "").strip()
+
+        if not api_key:
+            status.value = "● أدخل مفتاح FreeTheAI أولًا"
+
+            add_bubble(
+                "ASTRO AI",
+                "اكتب مفتاح FreeTheAI في خانة "
+                "«مفتاح FreeTheAI API» قبل إرسال سؤالك.",
+            )
+
+            return
 
         if is_bad(question):
             add_bubble(
                 "ASTRO AI",
                 "خلّينا في حاجة مفيدة وآمنة، وأنا أساعدك فيها.",
             )
+
             status.value = "● جاهز"
             page.update()
             return
@@ -328,7 +482,11 @@ def main(page: ft.Page):
                                 color=ACCENT_LIGHT,
                                 size=18,
                             ),
-                            ft.Text("جاري التفكير...", color=MUTED, size=14),
+                            ft.Text(
+                                "جاري التفكير...",
+                                color=MUTED,
+                                size=14
+                            ),
                         ],
                         spacing=9,
                     ),
@@ -355,20 +513,31 @@ def main(page: ft.Page):
                 chat.controls.remove(waiting_row)
 
             add_bubble("ASTRO AI", answer)
-            status.value = "● تم البحث على الإنترنت" if searched else "● جاهز"
+
+            status.value = (
+                "● تم البحث على الإنترنت"
+                if searched
+                else "● جاهز"
+            )
 
         except Exception as error:
             if waiting_row in chat.controls:
                 chat.controls.remove(waiting_row)
 
-            error_details = f"{type(error).__name__}: {error}"
+            error_details = (
+                f"{type(error).__name__}: {error}"
+            )
+
             add_bubble(
                 "ASTRO AI",
-                "حصل خطأ أثناء الاتصال بمزوّد الذكاء الاصطناعي.\n\n"
+                "حصل خطأ أثناء الاتصال بمزوّد "
+                "الذكاء الاصطناعي.\n\n"
                 f"تفاصيل الخطأ:\n{error_details}\n\n"
                 "تأكد من الإنترنت ومن صلاحية المفتاح، "
-                "وتأكد من تنفيذ Daily check-in في موقع FreeTheAI.",
+                "وتأكد من تنفيذ Daily check-in "
+                "في موقع FreeTheAI.",
             )
+
             status.value = "● تعذّر الاتصال"
 
         finally:
@@ -391,7 +560,12 @@ def main(page: ft.Page):
         color=WHITE,
         cursor_color=ACCENT_LIGHT,
         hint_style=ft.TextStyle(color=MUTED),
-        content_padding=ft.Padding(left=12, top=12, right=12, bottom=12),
+        content_padding=ft.Padding(
+            left=12,
+            top=12,
+            right=12,
+            bottom=12
+        ),
         on_submit=lambda e: page.run_task(send_message, e),
     )
 
@@ -408,7 +582,11 @@ def main(page: ft.Page):
     # -------------------------
 
     logo = ft.Container(
-        content=ft.Icon(ft.Icons.AUTO_AWESOME, size=27, color=WHITE),
+        content=ft.Icon(
+            ft.Icons.AUTO_AWESOME,
+            size=27,
+            color=WHITE
+        ),
         width=48,
         height=48,
         bgcolor=ACCENT,
@@ -422,8 +600,17 @@ def main(page: ft.Page):
                 logo,
                 ft.Column(
                     [
-                        ft.Text("ASTRO", size=22, weight=ft.FontWeight.BOLD, color=WHITE),
-                        ft.Text("YOUR AI COMPANION", size=10, color=ACCENT_LIGHT),
+                        ft.Text(
+                            "ASTRO",
+                            size=22,
+                            weight=ft.FontWeight.BOLD,
+                            color=WHITE
+                        ),
+                        ft.Text(
+                            "YOUR AI COMPANION",
+                            size=10,
+                            color=ACCENT_LIGHT
+                        ),
                     ],
                     spacing=2,
                     expand=True,
@@ -438,9 +625,16 @@ def main(page: ft.Page):
             ],
             spacing=12,
         ),
-        padding=ft.Padding(left=16, top=13, right=16, bottom=13),
+        padding=ft.Padding(
+            left=16,
+            top=13,
+            right=16,
+            bottom=13
+        ),
         bgcolor=SURFACE,
-        border=ft.Border.only(bottom=ft.BorderSide(1, BORDER)),
+        border=ft.Border.only(
+            bottom=ft.BorderSide(1, BORDER)
+        ),
     )
 
     # -------------------------
@@ -449,7 +643,12 @@ def main(page: ft.Page):
 
     status_bar = ft.Container(
         content=status,
-        padding=ft.Padding(left=16, top=7, right=16, bottom=7),
+        padding=ft.Padding(
+            left=16,
+            top=7,
+            right=16,
+            bottom=7
+        ),
         bgcolor=BG,
     )
 
@@ -460,7 +659,10 @@ def main(page: ft.Page):
     composer = ft.Container(
         content=ft.Row(
             [
-                ft.Container(content=input_box, expand=True),
+                ft.Container(
+                    content=input_box,
+                    expand=True
+                ),
                 send_button,
             ],
             vertical_alignment=ft.CrossAxisAlignment.END,
@@ -470,7 +672,12 @@ def main(page: ft.Page):
         bgcolor=SURFACE,
         border=ft.Border.all(1, BORDER),
         border_radius=22,
-        margin=ft.Margin(left=12, top=4, right=12, bottom=10),
+        margin=ft.Margin(
+            left=12,
+            top=4,
+            right=12,
+            bottom=10
+        ),
     )
 
     # -------------------------
@@ -481,7 +688,11 @@ def main(page: ft.Page):
         ft.Column(
             [
                 header,
-                ft.Container(content=chat, expand=True, bgcolor=BG),
+                ft.Container(
+                    content=chat,
+                    expand=True,
+                    bgcolor=BG
+                ),
                 status_bar,
                 ft.Container(
                     content=ft.Column(
@@ -489,14 +700,20 @@ def main(page: ft.Page):
                             api_key_box,
                             composer,
                             ft.Text(
-                                "مفتاح API لا يُحفظ في GitHub، لكنه مطلوب مجددًا عند إعادة فتح التطبيق.",
+                                "مفتاح API لا يُحفظ في GitHub، "
+                                "لكنه مطلوب مجددًا عند إعادة فتح التطبيق.",
                                 size=10,
                                 color=MUTED,
                             ),
                         ],
                         spacing=4,
                     ),
-                    padding=ft.Padding(left=12, right=12, top=4, bottom=4),
+                    padding=ft.Padding(
+                        left=12,
+                        right=12,
+                        top=4,
+                        bottom=4
+                    ),
                 ),
             ],
             expand=True,
@@ -510,6 +727,7 @@ def main(page: ft.Page):
         "أنا مساعدك الذكي. اسألني عن أي حاجة، "
         "وهحاول أساعدك بأفضل شكل ممكن.",
     )
+
     page.update()
 
 
