@@ -54,18 +54,17 @@ def search_net(query: str) -> str:
         with DDGS() as ddgs:
             results = list(ddgs.text(query, max_results=3))
 
-            return "\n".join(
-                f"- {item.get('title', '')}: {item.get('body', '')}"
-                for item in results
-                if item.get("body")
-            )
+        return "\n".join(
+            f"- {item.get('title', '')}: {item.get('body', '')}"
+            for item in results
+            if item.get("body")
+        )
     except Exception:
         return ""
 
 
 def get_ai_reply(question: str):
     lang = detect_language(question)
-
     search_data = ""
 
     search_terms = [
@@ -139,7 +138,6 @@ def main(page: ft.Page):
     except Exception:
         pass
 
-    # منطقة المحادثة
     chat = ft.ListView(
         expand=True,
         spacing=16,
@@ -180,7 +178,7 @@ def main(page: ft.Page):
                         sender,
                         size=12,
                         weight=ft.FontWeight.BOLD,
-                        color=ACCENT_LIGHT if not is_user else CYAN,
+                        color=CYAN if is_user else ACCENT_LIGHT,
                     ),
                     ft.Text(
                         content,
@@ -200,7 +198,7 @@ def main(page: ft.Page):
         )
 
         row = ft.Row(
-            [avatar, bubble] if not is_user else [bubble, avatar],
+            [bubble, avatar] if is_user else [avatar, bubble],
             alignment=(
                 ft.MainAxisAlignment.END
                 if is_user
@@ -317,7 +315,6 @@ def main(page: ft.Page):
             input_box.disabled = False
             page.update()
 
-    # مربع الكتابة
     input_box = ft.TextField(
         hint_text="اكتب رسالتك هنا...",
         multiline=True,
@@ -333,7 +330,7 @@ def main(page: ft.Page):
             horizontal=12,
             vertical=12,
         ),
-        on_submit=lambda e: page.run_task(send_message),
+        on_submit=lambda e: page.run_task(send_message, e),
     )
 
     send_button = ft.IconButton(
@@ -341,10 +338,9 @@ def main(page: ft.Page):
         icon_color=WHITE,
         bgcolor=ACCENT,
         tooltip="إرسال الرسالة",
-        on_click=lambda e: page.run_task(send_message),
+        on_click=lambda e: page.run_task(send_message, e),
     )
 
-    # رأس التطبيق
     logo = ft.Container(
         content=ft.Icon(
             ft.Icons.AUTO_AWESOME,
@@ -399,7 +395,6 @@ def main(page: ft.Page):
         ),
     )
 
-    # حالة التطبيق
     status_bar = ft.Container(
         content=status,
         padding=ft.padding.only(
@@ -411,7 +406,6 @@ def main(page: ft.Page):
         bgcolor=BG,
     )
 
-    # شريط الكتابة
     composer = ft.Container(
         content=ft.Row(
             [
@@ -436,7 +430,6 @@ def main(page: ft.Page):
         ),
     )
 
-    # التخطيط النهائي
     page.add(
         ft.Column(
             [
@@ -465,4 +458,4 @@ def main(page: ft.Page):
 
 
 if __name__ == "__main__":
-    ft.app(target=main)
+    ft.run(main)
