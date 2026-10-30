@@ -1,8 +1,8 @@
-import asyncio
 import json
 import threading
 import urllib.request
 import urllib.error
+import asyncio
 
 import flet as ft
 from duckduckgo_search import DDGS
@@ -130,6 +130,8 @@ def get_ai_reply(question: str, api_key: str):
             headers={
                 "Authorization": f"Bearer {api_key}",
                 "Content-Type": "application/json",
+                "Accept": "application/json",
+                "User-Agent": "ASTRO-AI/1.0",
             },
             method="POST",
         )
