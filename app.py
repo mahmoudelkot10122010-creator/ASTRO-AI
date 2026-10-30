@@ -11,7 +11,6 @@ APP_NAME = "ASTRO"
 # ASTRO Dark Theme
 BG = "#0B0D14"
 SURFACE = "#121622"
-SURFACE_LIGHT = "#1A2030"
 ACCENT = "#8B5CF6"
 ACCENT_LIGHT = "#A78BFA"
 CYAN = "#38BDF8"
@@ -73,9 +72,7 @@ def get_ai_reply(question: str):
         "فين", "when", "where", "latest",
     ]
 
-    lowered_question = question.lower()
-
-    if any(term in lowered_question for term in search_terms):
+    if any(term in question.lower() for term in search_terms):
         search_data = search_net(question)
 
     final_question = question
@@ -146,16 +143,12 @@ def main(page: ft.Page):
     )
 
     status = ft.Text(
-        "● متصل وجاهز",
+        "● جاهز",
         size=11,
         color=CYAN,
     )
 
-    def add_bubble(
-        sender: str,
-        content: str,
-        is_user: bool = False,
-    ):
+    def add_bubble(sender: str, content: str, is_user: bool = False):
         avatar = ft.Container(
             content=ft.Icon(
                 ft.Icons.PERSON_ROUNDED
@@ -168,7 +161,7 @@ def main(page: ft.Page):
             height=34,
             border_radius=12,
             bgcolor=USER_BUBBLE if is_user else ACCENT,
-            alignment=ft.alignment.center,
+            alignment=ft.Alignment.CENTER,
         )
 
         bubble = ft.Container(
@@ -191,7 +184,7 @@ def main(page: ft.Page):
                 tight=True,
             ),
             bgcolor=USER_BUBBLE if is_user else AI_BUBBLE,
-            border=ft.border.all(1, BORDER),
+            border=ft.Border.all(1, BORDER),
             border_radius=18,
             padding=14,
             width=min((page.width or 420) * 0.78, 520),
@@ -270,7 +263,7 @@ def main(page: ft.Page):
                         spacing=9,
                     ),
                     bgcolor=AI_BUBBLE,
-                    border=ft.border.all(1, BORDER),
+                    border=ft.Border.all(1, BORDER),
                     border_radius=16,
                     padding=14,
                 )
@@ -283,8 +276,7 @@ def main(page: ft.Page):
 
         try:
             answer, searched = await asyncio.to_thread(
-                get_ai_reply,
-                question,
+                get_ai_reply, question
             )
 
             if waiting_row in chat.controls:
@@ -326,9 +318,11 @@ def main(page: ft.Page):
         color=WHITE,
         cursor_color=ACCENT_LIGHT,
         hint_style=ft.TextStyle(color=MUTED),
-        content_padding=ft.padding.symmetric(
-            horizontal=12,
-            vertical=12,
+        content_padding=ft.Padding(
+            left=12,
+            top=12,
+            right=12,
+            bottom=12,
         ),
         on_submit=lambda e: page.run_task(send_message, e),
     )
@@ -351,7 +345,7 @@ def main(page: ft.Page):
         height=48,
         bgcolor=ACCENT,
         border_radius=16,
-        alignment=ft.alignment.center,
+        alignment=ft.Alignment.CENTER,
     )
 
     header = ft.Container(
@@ -385,22 +379,24 @@ def main(page: ft.Page):
             ],
             spacing=12,
         ),
-        padding=ft.padding.symmetric(
-            horizontal=16,
-            vertical=13,
+        padding=ft.Padding(
+            left=16,
+            top=13,
+            right=16,
+            bottom=13,
         ),
         bgcolor=SURFACE,
-        border=ft.border.only(
+        border=ft.Border.only(
             bottom=ft.BorderSide(1, BORDER),
         ),
     )
 
     status_bar = ft.Container(
         content=status,
-        padding=ft.padding.only(
+        padding=ft.Padding(
             left=16,
-            right=16,
             top=7,
+            right=16,
             bottom=7,
         ),
         bgcolor=BG,
@@ -418,14 +414,14 @@ def main(page: ft.Page):
             vertical_alignment=ft.CrossAxisAlignment.END,
             spacing=8,
         ),
-        padding=ft.padding.all(10),
+        padding=10,
         bgcolor=SURFACE,
-        border=ft.border.all(1, BORDER),
+        border=ft.Border.all(1, BORDER),
         border_radius=22,
-        margin=ft.margin.only(
+        margin=ft.Margin(
             left=12,
-            right=12,
             top=4,
+            right=12,
             bottom=10,
         ),
     )
