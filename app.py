@@ -72,18 +72,26 @@ def get_usage_count():
         return read_usage()["count"]
 
 
-def reserve_daily_message():
-    # Local per-installation limit only; it can be bypassed by clearing app data.
+def can_send_daily_message():
+    # Check the limit without consuming a message before the server responds.
+    with usage_lock:
+        count = read_usage()["count"]
+        return count < DAILY_MESSAGE_LIMIT, count
+
+
+def record_successful_message():
+    # Count only successful AI responses, not failed connection attempts.
     with usage_lock:
         data = read_usage()
         if data["count"] >= DAILY_MESSAGE_LIMIT:
-            return False, data["count"]
+            return data["count"]
         data["count"] += 1
         try:
             USAGE_FILE.write_text(json.dumps(data), encoding="utf-8")
         except OSError:
-            return False, DAILY_MESSAGE_LIMIT
-        return True, data["count"]
+            # Keep the app usable if local usage storage is unavailable.
+            return data["count"] - 1
+        return data["count"]
 
 
 def request_model(model, request_messages):
@@ -209,7 +217,7 @@ def main(page: ft.Page):
             page.update()
             return
 
-        allowed, _used = reserve_daily_message()
+        allowed, _used = can_send_daily_message()
         update_quota()
         if not allowed:
             status.value = "● وصلت للحد اليومي"
@@ -228,6 +236,7 @@ def main(page: ft.Page):
         page.update()
         try:
             answer, searched = await asyncio.to_thread(get_ai_reply, question)
+            record_successful_message()
             if waiting in chat.controls:
                 chat.controls.remove(waiting)
             add_bubble("ASTRO AI", answer)
