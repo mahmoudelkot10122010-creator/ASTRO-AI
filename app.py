@@ -3,6 +3,7 @@ import threading
 import urllib.request
 import urllib.error
 import asyncio
+import time
 
 import flet as ft
 from duckduckgo_search import DDGS
@@ -11,6 +12,9 @@ APP_NAME = "ASTRO"
 
 DEVELOPERS_AR = "محمود عبدالحليم وعمر شرف الدين"
 DEVELOPERS_EN = "Mahmoud Abdelhalim and Omar Sharaf El-Din"
+
+PRIMARY_MODEL = "fta/zai/glm-5.3"
+FALLBACK_MODEL = "fta/zai/glm-5.3-flash"
 
 # =========================
 # ASTRO THEME
@@ -120,10 +124,10 @@ def is_developer_question(text: str) -> bool:
 def developer_answer(text: str) -> str:
     if detect_language(text) == "Arabic":
         return (
-            f"أنا ASTRO! 🚀\n\n"
-            f"المطورين بتوعي هما:\n"
+            "أنا ASTRO! 🚀\n\n"
+            "المطورين بتوعي هما:\n"
             f"👨‍💻 {DEVELOPERS_AR}\n\n"
-            f"وهم أصحاب تطوير المشروع."
+            "وهم أصحاب تطوير المشروع."
         )
 
     return (
@@ -144,13 +148,16 @@ def search_net(query: str) -> str:
             results = list(ddgs.text(query, max_results=3))
 
         lines = []
+
         for item in results:
             title = item.get("title", "")
             body = item.get("body", "")
             url = item.get("href", "")
 
             if body:
-                lines.append(f"- {title}\n  {body}\n  {url}")
+                lines.append(
+                    f"- {title}\n  {body}\n  {url}"
+                )
 
         return "\n".join(lines)
 
@@ -159,7 +166,45 @@ def search_net(query: str) -> str:
 
 
 # =========================
-# FREE THE AI BACKEND
+# FREE THE AI API REQUEST
+# =========================
+
+def request_model(model: str, request_messages: list, api_key: str):
+    """
+    Sends one request to FreeTheAI using the specified model.
+    Raises HTTPError if the API returns an HTTP error.
+    """
+
+    payload = json.dumps({
+        "model": model,
+        "messages": request_messages,
+    }).encode("utf-8")
+
+    request = urllib.request.Request(
+        "https://api.freetheai.org/v1/chat/completions",
+        data=payload,
+        headers={
+            "Authorization": f"Bearer {api_key}",
+            "Content-Type": "application/json",
+            "Accept": "application/json",
+            "User-Agent": "ASTRO-AI/1.0",
+        },
+        method="POST",
+    )
+
+    with urllib.request.urlopen(request, timeout=60) as response:
+        data = json.loads(response.read().decode("utf-8"))
+
+    answer = data["choices"][0]["message"]["content"]
+
+    if not answer:
+        raise RuntimeError("المزوّد أرسل ردًا فارغًا.")
+
+    return str(answer).strip()
+
+
+# =========================
+# AUTOMATIC RETRY + FALLBACK
 # =========================
 
 def get_ai_reply(question: str, api_key: str):
@@ -210,65 +255,69 @@ def get_ai_reply(question: str, api_key: str):
             {"role": "user", "content": final_question}
         ]
 
-        payload = json.dumps({
-            "model": "fta/zai/glm-5.3",
-            "messages": request_messages,
-        }).encode("utf-8")
-
-        request = urllib.request.Request(
-            "https://api.freetheai.org/v1/chat/completions",
-            data=payload,
-            headers={
-                "Authorization": f"Bearer {api_key}",
-                "Content-Type": "application/json",
-                "Accept": "application/json",
-                "User-Agent": "ASTRO-AI/1.0",
-            },
-            method="POST",
-        )
-
+        # First attempt: primary model
         try:
-            with urllib.request.urlopen(
-                request,
-                timeout=60
-            ) as response:
-                data = json.loads(
-                    response.read().decode("utf-8")
-                )
-
-            answer = data["choices"][0]["message"]["content"]
-
-            if not answer:
-                raise RuntimeError(
-                    "المزوّد أرسل ردًا فارغًا."
-                )
-
-            answer = str(answer).strip()
-
-            messages.append({
-                "role": "user",
-                "content": question
-            })
-
-            messages.append({
-                "role": "assistant",
-                "content": answer
-            })
-
-            if len(messages) > 21:
-                messages[:] = [messages[0]] + messages[-20:]
-
-            return answer, bool(search_data)
-
-        except urllib.error.HTTPError as error:
-            details = error.read().decode(
-                "utf-8",
-                errors="replace"
+            answer = request_model(
+                PRIMARY_MODEL,
+                request_messages,
+                api_key,
             )
 
-            raise RuntimeError(
-                f"FreeTheAI HTTP {error.code}: {details}"
-            ) from error
+        except urllib.error.HTTPError as first_error:
+
+            # Only retry and switch models for HTTP 503.
+            if first_error.code != 503:
+                details = first_error.read().decode(
+                    "utf-8",
+                    errors="replace",
+                )
+                raise RuntimeError(
+                    f"FreeTheAI HTTP {first_error.code}: {details}"
+                ) from first_error
+
+            # Retry the primary model once after 2 seconds.
+            time.sleep(2)
+
+            try:
+                answer = request_model(
+                    PRIMARY_MODEL,
+                    request_messages,
+                    api_key,
+                )
+
+            except urllib.error.HTTPError as second_error:
+
+                # If the second attempt is not 503, show its error.
+                if second_error.code != 503:
+                    details = second_error.read().decode(
+                        "utf-8",
+                        errors="replace",
+                    )
+                    raise RuntimeError(
+                        f"FreeTheAI HTTP {second_error.code}: {details}"
+                    ) from second_error
+
+                # Both primary attempts returned 503.
+                # Switch automatically to the fallback model.
+                try:
+                    answer = request_model(
+                        FALLBACK_MODEL,
+                        request_messages,
+                        api_key,
+                    )
+
+                except urllib.error.HTTPError as fallback_error:
+                    details = fallback_error.read().decode(
+                        "utf-8",
+                        errors="replace",
+                    )
+
+                    raise RuntimeError(
+                        "تعذّر استخدام النموذج الأساسي "
+                        "والنموذج الاحتياطي.\n"
+                        f"النموذج الاحتياطي: {FALLBACK_MODEL}\n"
+                        f"HTTP {fallback_error.code}: {details}"
+                    ) from fallback_error
 
         except urllib.error.URLError as error:
             raise RuntimeError(
@@ -279,11 +328,27 @@ def get_ai_reply(question: str, api_key: str):
             KeyError,
             IndexError,
             TypeError,
-            json.JSONDecodeError
+            json.JSONDecodeError,
         ) as error:
             raise RuntimeError(
                 "استجابة غير متوقعة من FreeTheAI."
             ) from error
+
+        # Save the conversation only after a successful answer.
+        messages.append({
+            "role": "user",
+            "content": question,
+        })
+
+        messages.append({
+            "role": "assistant",
+            "content": answer,
+        })
+
+        if len(messages) > 21:
+            messages[:] = [messages[0]] + messages[-20:]
+
+        return answer, bool(search_data)
 
 
 # =========================
@@ -315,10 +380,8 @@ def main(page: ft.Page):
     status = ft.Text(
         "● جاهز",
         size=11,
-        color=CYAN
+        color=CYAN,
     )
-
-    # API KEY INPUT
 
     api_key_box = ft.TextField(
         label="مفتاح FreeTheAI API",
@@ -342,7 +405,7 @@ def main(page: ft.Page):
     def add_bubble(
         sender: str,
         content: str,
-        is_user: bool = False
+        is_user: bool = False,
     ):
         avatar = ft.Container(
             content=ft.Icon(
@@ -372,7 +435,7 @@ def main(page: ft.Page):
                         content,
                         size=15,
                         color=WHITE,
-                        selectable=True
+                        selectable=True,
                     ),
                 ],
                 spacing=7,
@@ -434,12 +497,11 @@ def main(page: ft.Page):
         input_box.value = ""
         add_bubble("أنت", question, True)
 
-        # Developer questions are answered locally.
-        # They do not require an API key or internet connection.
+        # Developer questions work without an API key.
         if is_developer_question(question):
             add_bubble(
                 "ASTRO AI",
-                developer_answer(question)
+                developer_answer(question),
             )
             status.value = "● جاهز"
             page.update()
@@ -485,7 +547,7 @@ def main(page: ft.Page):
                             ft.Text(
                                 "جاري التفكير...",
                                 color=MUTED,
-                                size=14
+                                size=14,
                             ),
                         ],
                         spacing=9,
@@ -564,7 +626,7 @@ def main(page: ft.Page):
             left=12,
             top=12,
             right=12,
-            bottom=12
+            bottom=12,
         ),
         on_submit=lambda e: page.run_task(send_message, e),
     )
@@ -585,7 +647,7 @@ def main(page: ft.Page):
         content=ft.Icon(
             ft.Icons.AUTO_AWESOME,
             size=27,
-            color=WHITE
+            color=WHITE,
         ),
         width=48,
         height=48,
@@ -604,12 +666,12 @@ def main(page: ft.Page):
                             "ASTRO",
                             size=22,
                             weight=ft.FontWeight.BOLD,
-                            color=WHITE
+                            color=WHITE,
                         ),
                         ft.Text(
                             "YOUR AI COMPANION",
                             size=10,
-                            color=ACCENT_LIGHT
+                            color=ACCENT_LIGHT,
                         ),
                     ],
                     spacing=2,
@@ -629,11 +691,11 @@ def main(page: ft.Page):
             left=16,
             top=13,
             right=16,
-            bottom=13
+            bottom=13,
         ),
         bgcolor=SURFACE,
         border=ft.Border.only(
-            bottom=ft.BorderSide(1, BORDER)
+            bottom=ft.BorderSide(1, BORDER),
         ),
     )
 
@@ -647,7 +709,7 @@ def main(page: ft.Page):
             left=16,
             top=7,
             right=16,
-            bottom=7
+            bottom=7,
         ),
         bgcolor=BG,
     )
@@ -661,7 +723,7 @@ def main(page: ft.Page):
             [
                 ft.Container(
                     content=input_box,
-                    expand=True
+                    expand=True,
                 ),
                 send_button,
             ],
@@ -676,7 +738,7 @@ def main(page: ft.Page):
             left=12,
             top=4,
             right=12,
-            bottom=10
+            bottom=10,
         ),
     )
 
@@ -691,7 +753,7 @@ def main(page: ft.Page):
                 ft.Container(
                     content=chat,
                     expand=True,
-                    bgcolor=BG
+                    bgcolor=BG,
                 ),
                 status_bar,
                 ft.Container(
@@ -712,7 +774,7 @@ def main(page: ft.Page):
                         left=12,
                         right=12,
                         top=4,
-                        bottom=4
+                        bottom=4,
                     ),
                 ),
             ],
